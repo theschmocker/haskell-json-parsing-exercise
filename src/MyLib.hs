@@ -14,7 +14,7 @@ data JsonValue
   | JsonString String
   | JsonArray [JsonValue]
   | JsonObject (M.Map String JsonValue)
-  deriving (Show)
+  deriving (Eq, Show)
 
 newtype Parser a = Parser {runParser :: String -> Maybe (String, a)}
 
@@ -43,9 +43,6 @@ instance Alternative Parser where
       ( \s -> do
           p1 s <|> p2 s
       )
-
-many1 :: Alternative f => f a -> f [a]
-many1 p = p *> many p
 
 prettyPrint :: JsonValue -> String
 prettyPrint JsonNull = "null"
@@ -107,7 +104,7 @@ jsonNull :: Parser JsonValue
 jsonNull = JsonNull <$ stringP "null"
 
 jsonNumber :: Parser JsonValue
-jsonNumber = JsonNumber . read <$> many1 (charIf isDigit)
+jsonNumber = JsonNumber . read <$> some (charIf isDigit)
 
 jsonBool :: Parser JsonValue
 jsonBool = jsonTrue <|> jsonFalse

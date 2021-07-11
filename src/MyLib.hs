@@ -44,6 +44,9 @@ instance Alternative Parser where
           p1 s <|> p2 s
       )
 
+many1 :: Alternative f => f a -> f [a]
+many1 p = p *> many p
+
 prettyPrint :: JsonValue -> String
 prettyPrint JsonNull = "null"
 prettyPrint (JsonBool True) = "true"
@@ -66,27 +69,33 @@ jsonValue =
     <|> jsonObject
 
 charP :: Char -> Parser Char
-charP c =
+charP c = charIf (== c)
+
+charIf :: (Char -> Bool) -> Parser Char
+charIf pred =
   Parser
     ( \case
         [] -> Nothing
         (x : xs)
-          | x == c -> Just (xs, c)
+          | pred x -> Just (xs, x)
           | otherwise -> Nothing
     )
 
+normalChar :: Parser Char
+normalChar = charIf (liftA2 (&&) (/= '"') (/= '\\'))
+
+escapedChar :: Parser Char
+escapedChar =
+  '"' <$ stringP "\\\""
+    <|> '\n' <$ stringP "\\n"
+    <|> '\b' <$ stringP "\\b"
+    <|> '\t' <$ stringP "\\t"
+    <|> '\r' <$ stringP "\\r"
+    <|> '\f' <$ stringP "\\f"
+    <|> '\\' <$ stringP "\\\\"
+
 stringP :: String -> Parser String
 stringP = traverse charP
-
-spanP :: (Char -> Bool) -> Parser String
-spanP p =
-  Parser
-    ( \s ->
-        let (match, input) = span p s
-         in case match of
-              [] -> Nothing
-              xs -> Just (input, match)
-    )
 
 sepBy :: Parser String -> Parser b -> Parser [b]
 sepBy sep parser = many (parser <* (sep <|> pure []))
@@ -98,7 +107,7 @@ jsonNull :: Parser JsonValue
 jsonNull = JsonNull <$ stringP "null"
 
 jsonNumber :: Parser JsonValue
-jsonNumber = JsonNumber . read <$> spanP isDigit
+jsonNumber = JsonNumber . read <$> many1 (charIf isDigit)
 
 jsonBool :: Parser JsonValue
 jsonBool = jsonTrue <|> jsonFalse
@@ -106,14 +115,13 @@ jsonBool = jsonTrue <|> jsonFalse
     jsonTrue = JsonBool True <$ stringP "true"
     jsonFalse = JsonBool False <$ stringP "false"
 
--- TODO: support escapes (eg \")
 jsonString :: Parser JsonValue
 jsonString =
   JsonString
-    <$> (charP '"' *> (concat <$> many (spanP (/= '"'))) <* charP '"')
+    <$> (charP '"' *> many (normalChar <|> escapedChar) <* charP '"')
 
 whitespace :: Parser String
-whitespace = concat <$> many (spanP isSpace)
+whitespace = many (charIf isSpace)
 
 jsonArray :: Parser JsonValue
 jsonArray = JsonArray <$> (charP '[' *> whitespace *> commaSeparated jsonValue <* whitespace <* charP ']')
@@ -122,6 +130,6 @@ jsonObject :: Parser JsonValue
 jsonObject = JsonObject <$> (charP '{' *> whitespace *> (M.fromList <$> commaSeparated pair) <* whitespace <* charP '}')
   where
     pair = extract <$> key <*> colon <*> jsonValue
-    key = charP '"' *> spanP (/= '"') <* charP '"'
+    key = charP '"' *> many (charIf (/= '"')) <* charP '"'
     colon = whitespace *> charP ':' *> whitespace
     extract k _ v = (k, v)

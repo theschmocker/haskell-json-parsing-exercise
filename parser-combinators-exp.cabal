@@ -56,3 +56,4 @@ Test-Suite tests
     build-depends: base
                  , hspec
                  , parser-combinators-exp
+                 , containers

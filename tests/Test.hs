@@ -1,5 +1,6 @@
 module Main where
 
+import qualified Data.Map as M
 import MyLib
 import System.Exit (exitFailure)
 import Test.Hspec
@@ -69,3 +70,26 @@ testJsonParsers = hspec $ do
       runParser jsonString "\"aaaaaaaaaaaaa" `shouldBe` Nothing
     it "Doesn't parse bare characters" $ do
       runParser jsonString "asdflasdf" `shouldBe` Nothing
+
+    describe "jsonArray" $ do
+      it "It parses an empty array" $ do
+        runParser jsonArray "[]" `shouldBe` Just ("", JsonArray [])
+      it "It parses an array with a single value" $ do
+        runParser jsonArray "[1]" `shouldBe` Just ("", JsonArray [JsonNumber 1])
+      it "It parses an array with multiple values" $ do
+        runParser jsonArray "[1, 2, 3, 4]" `shouldBe` Just ("", JsonArray [JsonNumber 1, JsonNumber 2, JsonNumber 3, JsonNumber 4])
+      it "It parses a nested array with multiple values" $ do
+        runParser jsonArray "[[1, 2, 3, 4]]" `shouldBe` Just ("", JsonArray [JsonArray [JsonNumber 1, JsonNumber 2, JsonNumber 3, JsonNumber 4]])
+      it "It parses an array with multiple values of different types" $ do
+        runParser jsonArray "[null, true, false, 42, \"oof\", {}]"
+          `shouldBe` Just
+            ( "",
+              JsonArray
+                [ JsonNull,
+                  JsonBool True,
+                  JsonBool False,
+                  JsonNumber 42,
+                  JsonString "oof",
+                  JsonObject M.empty
+                ]
+            )
